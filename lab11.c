@@ -10,10 +10,10 @@
 #define GRN "\e[0;32m"
 #define CRESET "\e[0m"
 
-#define handle_error(msg)            \
-  do {                               \
-    perror(msg);                     \
-    exit(EXIT_FAILURE);              \
+#define handle_error(msg)                                                      \
+  do {                                                                         \
+    perror(msg);                                                               \
+    exit(EXIT_FAILURE);                                                        \
   } while (0)
 
 size_t read_all_bytes(const char *filename, void *buffer, size_t buffer_size) {
@@ -62,8 +62,19 @@ int main() {
   const char *signature_files[] = {"signature1.sig", "signature2.sig",
                                    "signature3.sig"};
 
-  // TODO: Load the public key using PEM_read_PUBKEY
   EVP_PKEY *pubkey = NULL;
+
+  FILE *pubkey_file = fopen("public_key.pem", "r");
+  if (pubkey_file == NULL) {
+    handle_error("public key file open");
+  }
+
+  pubkey = PEM_read_PUBKEY(pubkey_file, NULL, NULL, NULL);
+  if (pubkey == NULL) {
+    handle_error("public key read");
+  }
+
+  fclose(pubkey_file);
 
   // Verify each message
   for (int i = 0; i < 3; i++) {
@@ -100,8 +111,52 @@ int verify(const char *message_path, const char *sign_path, EVP_PKEY *pubkey) {
   unsigned char message[MAX_FILE_SIZE];
   unsigned char signature[MAX_FILE_SIZE];
 
+  FILE *message_file = fopen(message_path, "r");
+  if (message_file == NULL) {
+    handle_error("message file open");
+  }
+
+  FILE *sign_file = fopen(sign_path, "r");
+  if (sign_file == NULL) {
+    handle_error("sign file open");
+  }
+
+  if (fgets((char *)message, MAX_FILE_SIZE, message_file) == NULL) {
+    handle_error("read message file");
+  }
+
+  if (fgets((char *)signature, MAX_FILE_SIZE, sign_file) == NULL) {
+    handle_error("read sign file");
+  }
+
+  fclose(message_file);
+  fclose(sign_file);
+
   // TODO: Check if the message is authentic using the signature.
   // Look at: https://wiki.openssl.org/index.php/EVP_Signing_and_Verifying
+
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  if (mdctx == NULL) {
+    handle_error("message digest context creation");
+  }
+
+  if (EVP_DigestVerifyInit(mdctx, NULL, EVP_sha256(), NULL, pubkey) != 1) {
+    handle_error("digest verify init");
+  }
+
+  if (EVP_DigestVerifyUpdate(mdctx, (char *)message, strlen((char *)message)) !=
+      1) {
+    handle_error("digest verify update");
+  }
+
+  if (EVP_DigestVerifyFinal(mdctx, (unsigned char *)signature,
+                            strlen((char *)signature)) == 1) {
+    return 1;
+  } else {
+    return 0;
+  }
+
+  EVP_MD_CTX_free(mdctx);
 
   return -1;
 }
